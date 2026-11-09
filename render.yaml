@@ -1,0 +1,30 @@
+# Render deployment — Rosette-Sealed Checkout demo.
+# Hosting decision (closed Nov 8): the claimed $50 Render credit
+# ("Hackathon Participant $50 credit", no card on file, valid to
+# Oct 31, 2027). Keep usage inside the $50; any charge beyond the credit
+# is an owner ask first. The demo must stay live until winners are
+# announced Dec 21, 2026.
+#
+# STATUS: prepared, NOT deployed. Deployment happens after the owner's
+# GitHub repo step lands (the service builds from that repo).
+services:
+  - type: web
+    name: rosette-sealed-checkout
+    runtime: python
+    plan: starter        # stays awake through judging (no free-tier sleep)
+    buildCommand: pip install .
+    startCommand: python -m rosette_sealed_checkout.web
+    healthCheckPath: /healthz
+    envVars:
+      # Fill in Render's dashboard from the local .env at deploy time.
+      # Sandbox credentials only — this project has no production config.
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: CHANNEL3_API_KEY
+        sync: false
+      - key: KERNEL_API_KEY
+        sync: false

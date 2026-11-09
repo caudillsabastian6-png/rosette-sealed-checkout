@@ -1,0 +1,29 @@
+[
+  {
+    "item_id": "demo-listing-001",
+    "kind": "listing",
+    "title": "Charizard ex — 199/165 (sandbox demo copy)",
+    "identity": {"name": "Charizard ex", "set": "Scarlet & Violet 151", "number": "199/165"},
+    "price": {"currency": "USD", "value": "25.00"},
+    "fulfilment_evidence": {"name": "Charizard ex", "set": "Scarlet & Violet 151", "number": "199/165", "legible": true},
+    "scenario": "happy path — shipped card matches the sealed identity"
+  },
+  {
+    "item_id": "demo-listing-002",
+    "kind": "listing",
+    "title": "Pikachu — 062/165 (sandbox demo copy)",
+    "identity": {"name": "Pikachu", "set": "Scarlet & Violet 151", "number": "062/165"},
+    "price": {"currency": "USD", "value": "12.00"},
+    "fulfilment_evidence": {"name": "Raichu", "set": "Scarlet & Violet 151", "number": "062/165", "legible": true},
+    "scenario": "swap path — right printed number, wrong card shipped"
+  },
+  {
+    "item_id": "demo-listing-003",
+    "kind": "listing",
+    "title": "Bulbasaur — 001/165 (sandbox demo copy)",
+    "identity": {"name": "Bulbasaur", "set": "Scarlet & Violet 151", "number": "001/165"},
+    "price": {"currency": "USD", "value": "9.00"},
+    "fulfilment_evidence": {"name": "Bulbasaur", "set": "Scarlet & Violet 151", "number": "001/165", "legible": false},
+    "scenario": "mandatory Inconclusive case — fulfilment scans too blurred to read"
+  }
+]

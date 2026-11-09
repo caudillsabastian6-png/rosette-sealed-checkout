@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rosette-sealed-checkout"
+version = "0.1.0"
+description = "A PayPal sandbox checkout where payment is held until Rosette's verification seal passes."
+license = { text = "MIT" }
+requires-python = ">=3.11"
+# BUILD (Nov 9): the demo core is standard-library only, so the app runs
+# anywhere Python 3.11+ runs with zero installs — judges can run it as-is.
+# The SDKs below are integration extras, imported lazily by their adapters
+# and never required for the local stub demo.
+dependencies = []
+
+[project.optional-dependencies]
+integrations = [
+    "httpx>=0.27",        # PayPal REST calls from adapters/paypal
+    "channel3>=4",        # Channel3 Fern SDK (INTEGRATIONS.md §2.4 — pin one SDK)
+    "onkernel>=0.7",      # Kernel Python SDK (package name to confirm at build)
+    "playwright>=1.44",   # drives the Kernel browser over CDP
+]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
