@@ -66,21 +66,42 @@ class SandboxPayPalClient:
         return self._token
 
     def _call(self, method: str, path: str, body: dict | None = None,
-              request_id: str | None = None) -> dict:
+              request_id: str | None = None,
+              extra_headers: dict | None = None) -> dict:
         data = json.dumps(body).encode() if body is not None else None
         headers = {"Authorization": f"Bearer {self._auth_token()}",
                    "Content-Type": "application/json"}
         if request_id:
             headers["PayPal-Request-Id"] = request_id
+        if extra_headers:
+            headers.update(extra_headers)
         req = urllib.request.Request(f"{self._base}{path}", data=data,
                                      headers=headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 raw = resp.read()
         except urllib.error.HTTPError as exc:  # typed, never stringly (§3)
-            raise PayPalError("effector_failed",
-                              f"PayPal sandbox {method} {path} -> "
-                              f"HTTP {exc.code}") from exc
+            detail = (f"PayPal sandbox {method} {path} -> "
+                      f"HTTP {exc.code}")
+            try:  # surface PayPal's own error name/issue (never secrets)
+                body = json.loads(exc.read().decode("utf-8", "replace"))
+                fields = []
+                for d in body.get("details", []):
+                    bits = [b for b in (d.get("field"), d.get("issue"))
+                            if b]
+                    if bits:
+                        fields.append(":".join(bits))
+                if body.get("name"):
+                    detail += f" {body['name']}"
+                if body.get("message"):
+                    detail += f" — {body['message']}"
+                if fields:
+                    detail += f" [{'; '.join(fields)}]"
+                if body.get("debug_id"):
+                    detail += f" (debug_id {body['debug_id']})"
+            except Exception:
+                pass
+            raise PayPalError("effector_failed", detail) from exc
         except urllib.error.URLError as exc:
             raise PayPalError("source_unavailable",
                               f"PayPal sandbox unreachable: {exc.reason}",
@@ -106,12 +127,27 @@ class SandboxPayPalClient:
         return self._call("POST", f"/v2/checkout/orders/{order_id}/authorize",
                           {}, request_id=request_id)
 
-    def capture_authorization(self, authorization_id: str,
-                              request_id: str) -> dict:
-        return self._call("POST",
-                          f"/v2/payments/authorizations/"
-                          f"{authorization_id}/capture",
-                          {}, request_id=request_id)
+    def capture_authorization(self, authorization_id: str, *,
+                              amount: dict, request_id: str) -> dict:
+        """Capture an authorization (Payments v2).
+
+        The request body names the amount explicitly and marks the
+        capture final — the conforming full-capture shape. The
+        `Prefer: return=representation` header is REQUIRED: without it
+        PayPal answers this endpoint with a minimal representation
+        (id / status / links only, no amount), which is exactly what
+        the Nov 10 live run returned — the capture itself succeeded
+        at PayPal while the caller's summary code died on the missing
+        "amount" field (see SANDBOX-CAPTURE-FIX-2026-11-10.md).
+        """
+        return self._call(
+            "POST",
+            f"/v2/payments/authorizations/{authorization_id}/capture",
+            {"amount": {"currency_code": amount["currency"],
+                        "value": amount["value"]},
+             "final_capture": True},
+            request_id=request_id,
+            extra_headers={"Prefer": "return=representation"})
 
     def void_authorization(self, authorization_id: str,
                            request_id: str) -> dict:

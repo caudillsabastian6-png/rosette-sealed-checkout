@@ -99,6 +99,111 @@ def test_agent_cannot_approve():
     assert out["error"]["kind"] == "approval_required"
 
 
+def test_caption_reflects_actual_state():
+    """The checkout caption is derived from the order's live state —
+    a settled or voided order must never still claim 'held'."""
+    from rosette_sealed_checkout.checkout import state_caption
+
+    def order(status, payments=None):
+        return {"status": status,
+                "purchase_units": [{"payments": payments or {}}]}
+
+    held = state_caption(order("AUTHORIZED",
+                               {"authorizations": [{"id": "A",
+                                                    "status": "CREATED"}]}))
+    assert held == "AUTHORIZED — held, not settled"
+    settled = state_caption(order(
+        "COMPLETED",
+        {"authorizations": [{"id": "A", "status": "CAPTURED"}],
+         "captures": [{"id": "C", "status": "COMPLETED"}]}))
+    assert "held" not in settled and "CAPTURED" in settled
+    voided = state_caption(order("VOIDED",
+                                 {"authorizations": [{"id": "A",
+                                                      "status": "VOIDED"}]}))
+    assert voided.startswith("VOIDED")
+    waiting = state_caption(order("CREATED"))
+    assert "waiting for the buyer" in waiting
+
+
+def test_adapter_rail_is_stub_without_credentials():
+    """With no sandbox credentials in .env the adapter must serve the
+    stub rail (tests run credential-free) — and say so."""
+    assert paypal.rail() == "stub"
+    order, fields = paypal.create_and_authorize(
+        change_id="test-rail", amount={"currency": "USD", "value": "1.00"},
+        seal_receipt_id="rcpt_test")
+    assert order["id"].startswith("DEMO-")
+    assert fields["approve_url"] is None
+
+
+def test_capture_request_shape_is_conforming():
+    """The Payments v2 capture call must send an explicit amount +
+    final_capture body AND Prefer: return=representation — without
+    the header PayPal answers with a minimal representation (no
+    amount field), which is what broke the Nov 10 live apply."""
+    from rosette_sealed_checkout.adapters.paypal.client import \
+        SandboxPayPalClient
+
+    client = SandboxPayPalClient()  # base-URL check only; no creds read
+    seen = {}
+
+    def fake_call(method, path, body=None, request_id=None,
+                  extra_headers=None):
+        seen.update(method=method, path=path, body=body,
+                    request_id=request_id, extra_headers=extra_headers)
+        return {"id": "CAP1", "status": "COMPLETED",
+                "amount": {"currency_code": "USD", "value": "25.00"}}
+
+    client._call = fake_call
+    out = client.capture_authorization(
+        "AUTH1", amount={"currency": "USD", "value": "25.00"},
+        request_id="chg_test")
+    assert out["id"] == "CAP1"
+    assert seen["method"] == "POST"
+    assert seen["path"] == "/v2/payments/authorizations/AUTH1/capture"
+    assert seen["body"] == {"amount": {"currency_code": "USD",
+                                       "value": "25.00"},
+                            "final_capture": True}
+    assert seen["extra_headers"] == {"Prefer": "return=representation"}
+    assert seen["request_id"] == "chg_test"  # contract §1.5 idempotency
+
+
+def test_sandbox_apply_tolerates_minimal_capture_body():
+    """Regression for the Nov 10 live failure: PayPal's capture
+    response was the minimal representation {"id", "status", "links"}
+    with NO amount field, and the adapter died on KeyError('amount')
+    after the money had already moved. The adapter must take the
+    amount from the approved change params instead."""
+    class FakeClient:
+        def __init__(self):
+            self.got = {}
+
+        def capture_authorization(self, authorization_id, *, amount,
+                                  request_id):
+            self.got = {"authorization_id": authorization_id,
+                        "amount": amount, "request_id": request_id}
+            return {"id": "0DT92802L3371522U", "status": "COMPLETED",
+                    "links": []}  # the exact live minimal body shape
+
+    fake = FakeClient()
+    orig_rail, orig_live = paypal.rail, paypal._live_client
+    paypal.rail = lambda: "sandbox"
+    paypal._live_client = lambda: fake
+    try:
+        change = {"change_id": "chg_regression", "action": "capture"}
+        params = {"authorization_id": "7M4577450N801910A",
+                  "amount": {"currency": "USD", "value": "25.00"},
+                  "item_id": "demo-listing-001"}
+        out = paypal.apply_change(change, params)
+    finally:
+        paypal.rail, paypal._live_client = orig_rail, orig_live
+    assert out["paypal_capture_id"] == "0DT92802L3371522U"
+    assert "$25.00" in out["summary"] and "real sandbox rail" in \
+        out["summary"]
+    assert fake.got["amount"] == {"currency": "USD", "value": "25.00"}
+    assert fake.got["request_id"] == "chg_regression"
+
+
 def test_denial_is_terminal_for_that_change():
     snap = verbs.read({"source": "demo.listings"})
     order, proposal, change, _ = _checkout_and_gate(

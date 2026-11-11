@@ -9,6 +9,13 @@ engine.verbs; the web layer calls it, it does not reimplement it.
 Every payload carries the rail mode: "stub" until the owner's sandbox
 credential pull, then "sandbox-live". The UI prints the mode on screen —
 stub state is never dressed up as a real PayPal response.
+
+On the sandbox rail the buyer approval is PayPal's own step: the order
+comes back CREATED with an approve link, and authorization happens once
+PayPal reports APPROVED (adapters/paypal.refresh_and_authorize). The
+state caption is therefore DERIVED from the order's actual state at
+render time — it can never claim "held" for an order that has settled,
+been voided, or is still waiting on its buyer.
 """
 from __future__ import annotations
 
@@ -18,11 +25,29 @@ from .engine import verbs
 from .seal import verify as seal_verify
 
 
+def state_caption(order: dict) -> str:
+    """One-line state caption computed from the order's real state."""
+    payments = order["purchase_units"][0].get("payments", {})
+    if payments.get("captures"):
+        return "CAPTURED — settled (sandbox money, seller paid)"
+    auths = payments.get("authorizations") or []
+    if order.get("status") == "VOIDED" or \
+            (auths and auths[0].get("status") == "VOIDED"):
+        return "VOIDED — hold released, buyer keeps their money"
+    if auths:
+        return "AUTHORIZED — held, not settled"
+    if order.get("status") == "APPROVED":
+        return "APPROVED — buyer approved; authorizing"
+    if order.get("status") == "CREATED":
+        return "CREATED — waiting for the buyer to approve in PayPal sandbox"
+    return str(order.get("status", ""))
+
+
 def checkout(item: dict, snapshot: dict) -> dict:
-    """Run seal #1 + order/approve/authorize for one listing."""
+    """Run seal #1 + create order (+ authorize when the rail allows)."""
     seal1 = seal_verify(item["identity"], item.get("fulfilment_evidence"))
     panel = channel3.market_panel(item["identity"])
-    order, external = paypal.create_and_authorize(
+    order, fields = paypal.create_and_authorize(
         change_id=f"buy-{item['item_id']}",
         amount=item["price"],
         seal_receipt_id=seal1["receipt_ref"])
@@ -32,7 +57,8 @@ def checkout(item: dict, snapshot: dict) -> dict:
         "seal_listing": seal1,
         "market_panel": panel,
         "order": order,
-        "state_caption": "AUTHORIZED — held, not settled",
+        "approve_url": fields.get("approve_url"),
+        "state_caption": state_caption(order),
     }
 
 

@@ -55,6 +55,13 @@ PAYPAL_BASE_URL = "PAYPAL_BASE_URL"
 CHANNEL3_API_KEY = "CHANNEL3_API_KEY"
 KERNEL_API_KEY = "KERNEL_API_KEY"
 EBAY_READ_ENABLED = "EBAY_READ_ENABLED"
+# OPTIONAL: the sandbox BUYER (Personal account) sign-in, pulled from
+# Developer Dashboard -> Sandbox -> Accounts (INTEGRATIONS.md §1.1,
+# RISKS.md §4). Reserved for the Kernel browser-persona approval driver
+# (adapters/kernel); the standard buyer-redirect approval needs neither.
+# Sandbox-only credentials — never a real PayPal password.
+PAYPAL_SANDBOX_BUYER_EMAIL = "PAYPAL_SANDBOX_BUYER_EMAIL"
+PAYPAL_SANDBOX_BUYER_PASSWORD = "PAYPAL_SANDBOX_BUYER_PASSWORD"
 
 # Sandbox ONLY. There is deliberately no production base URL anywhere in
 # this project (ENGINE-CONTRACT.md §7); pointing the config anywhere else
@@ -75,6 +82,16 @@ def paypal_mode() -> str:
     if present(PAYPAL_CLIENT_ID) and present(PAYPAL_CLIENT_SECRET):
         return "sandbox-live"
     return "stub"
+
+
+def sandbox_buyer_present() -> bool:
+    """True iff the optional sandbox buyer (Personal) sign-in is in .env.
+
+    Presence only — the values are read solely by the Kernel approval
+    driver, never logged, never shown.
+    """
+    return present(PAYPAL_SANDBOX_BUYER_EMAIL) and \
+        present(PAYPAL_SANDBOX_BUYER_PASSWORD)
 
 
 def channel3_mode() -> str:

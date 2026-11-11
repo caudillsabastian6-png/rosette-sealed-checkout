@@ -31,9 +31,15 @@ The demo core is **Python standard library only** — no installs needed.
 # 1. Python 3.11+. Nothing to install for the local demo.
 # 2. (Optional, for live sandbox calls) copy .env.example to .env and fill
 #    in SANDBOX-ONLY credentials: PayPal sandbox app client id/secret,
-#    Channel3 API key, Kernel API key. Without them the app runs on its
-#    stub rail and labels itself "stub" on every screen — PayPal-shaped
-#    simulated responses, clearly marked, never presented as real calls.
+#    Channel3 API key, Kernel API key. With them, the money rail makes
+#    REAL PayPal sandbox API calls (receipts say "real sandbox rail" and
+#    carry genuine sandbox ids) — except the buyer's approval, which
+#    PayPal reserves for the buyer: the checkout page shows PayPal's own
+#    approve link, the buyer (sandbox Personal account) approves there,
+#    and the app authorizes for real once PayPal reports APPROVED.
+#    Without credentials the app runs on its stub rail and labels itself
+#    "stub" on every screen — PayPal-shaped simulated responses, clearly
+#    marked, never presented as real calls.
 #    eBay readers are optional: without them the demo seeds from data/demo/.
 # 3. Run:
 PYTHONPATH=src python -m rosette_sealed_checkout.web   # http://localhost:8080
@@ -41,11 +47,14 @@ PYTHONPATH=src python -m rosette_sealed_checkout.web   # http://localhost:8080
 python3 tests/test_flow.py
 ```
 
-Walk the demo: open a listing → **Buy** (order is created, the demo buyer
-approves, funds are AUTHORIZED — held, not settled) → **Run fulfilment
+Walk the demo: open a listing → **Buy** (on the stub rail the demo buyer
+approves in-app; on the live rail approve via the PayPal sandbox link —
+either way funds end up AUTHORIZED — held, not settled) → **Run fulfilment
 seal** (seal #2 + dry-run) → the owner approval tap captures, or the seal
-gate voids. The third listing is the mandatory Inconclusive case: blurred
-fulfilment scans, the seal abstains, and an abstention never captures.
+gate voids. A captured order can be **undone** from its checkout page —
+the undo is a full refund, appended to the chain. The third listing is
+the mandatory Inconclusive case: blurred fulfilment scans, the seal
+abstains, and an abstention never captures.
 Every step lands on the receipt chain at `/receipts`.
 
 Demo data in `data/demo/` is sanitized sandbox copies — no real listings, buyers, or credentials.
