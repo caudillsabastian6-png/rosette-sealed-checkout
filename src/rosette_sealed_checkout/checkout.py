@@ -15,7 +15,7 @@ comes back CREATED with an approve link, and authorization happens once
 PayPal reports APPROVED (adapters/paypal.refresh_and_authorize). The
 state caption is therefore DERIVED from the order's actual state at
 render time — it can never claim "held" for an order that has settled,
-been voided, or is still waiting on its buyer.
+been voided, been refunded, or is still waiting on its buyer.
 """
 from __future__ import annotations
 
@@ -28,7 +28,19 @@ from .seal import verify as seal_verify
 def state_caption(order: dict) -> str:
     """One-line state caption computed from the order's real state."""
     payments = order["purchase_units"][0].get("payments", {})
-    if payments.get("captures"):
+    captures = payments.get("captures") or []
+    if captures:
+        # A refunded capture must never still claim "settled". On the
+        # sandbox rail PayPal flips the capture status itself; on the
+        # stub rail a refund is recorded in payments["refunds"] and is
+        # always for the capture's full amount.
+        cap_status = captures[0].get("status")
+        if cap_status == "PARTIALLY_REFUNDED":
+            return ("PARTIALLY REFUNDED — undo applied in part "
+                    "(sandbox money returned to buyer)")
+        if cap_status == "REFUNDED" or payments.get("refunds"):
+            return ("REFUNDED — undo applied "
+                    "(sandbox money returned to buyer)")
         return "CAPTURED — settled (sandbox money, seller paid)"
     auths = payments.get("authorizations") or []
     if order.get("status") == "VOIDED" or \

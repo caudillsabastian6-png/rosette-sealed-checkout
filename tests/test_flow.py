@@ -117,6 +117,28 @@ def test_caption_reflects_actual_state():
         {"authorizations": [{"id": "A", "status": "CAPTURED"}],
          "captures": [{"id": "C", "status": "COMPLETED"}]}))
     assert "held" not in settled and "CAPTURED" in settled
+    # A refunded capture must never still claim "settled" — sandbox
+    # shape (PayPal flips the capture status, refunds listed):
+    refunded = state_caption(order(
+        "COMPLETED",
+        {"authorizations": [{"id": "A", "status": "CAPTURED"}],
+         "captures": [{"id": "C", "status": "REFUNDED"}],
+         "refunds": [{"id": "R", "status": "COMPLETED"}]}))
+    assert refunded.startswith("REFUNDED") and "settled" not in refunded
+    # Stub-rail shape (capture stays COMPLETED, refund recorded):
+    refunded_stub = state_caption(order(
+        "COMPLETED",
+        {"authorizations": [{"id": "A", "status": "CAPTURED"}],
+         "captures": [{"id": "C", "status": "COMPLETED"}],
+         "refunds": [{"id": "R", "status": "COMPLETED"}]}))
+    assert refunded_stub.startswith("REFUNDED")
+    # A partial refund is its own honest state, not a full refund:
+    partial = state_caption(order(
+        "COMPLETED",
+        {"authorizations": [{"id": "A", "status": "CAPTURED"}],
+         "captures": [{"id": "C", "status": "PARTIALLY_REFUNDED"}],
+         "refunds": [{"id": "R", "status": "COMPLETED"}]}))
+    assert partial.startswith("PARTIALLY REFUNDED")
     voided = state_caption(order("VOIDED",
                                  {"authorizations": [{"id": "A",
                                                       "status": "VOIDED"}]}))
